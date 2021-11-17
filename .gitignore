@@ -1,0 +1,21 @@
+/target
+Cargo.lock
+# --- Files ---
+**/*.ts
+**.wasm
+**/*.rs.bk
+**/*.log
+
+# --- Dependencies and Build artifacts ---
+**/node_modules
+**/target
+**/pkg/*
+
+# --- IDE metadata ---
+**/.idea
+**/.vscode
+
+/examples/seed/pkg
+/examples/seed/Cargo.lock
+/examples/seed/config.json
+Cargo.lock
