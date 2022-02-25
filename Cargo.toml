@@ -9,6 +9,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["cdylib","rlib"]
+all-features = false
+
+[features]
+default = [ "reqwest_async" ]
+reqwest_async = [ "reqwest"]
+
 [dependencies]
 seed = {git  ="https://github.com/seed-rs/seed", branch="master"}
 serde = { version = "1", features = ["derive"] }
@@ -17,6 +25,21 @@ async-trait = "0.1.50"
 rand = "0.8.4"
 urlencoding = "2.1.0"
 chrono = { version = "0.4.6", features = ["serde", "wasmbind"] }
+
+http = "0.2.5"
+url = { version = "2"}
+maybe-async = "0.2"
+serde_qs = "0.8"
+json = "0.12.4"
+thiserror = "1.0.30"
+[dependencies.reqwest]
+version = "0.11.8"
+features = [ "gzip", "json","multipart","stream" ]
+optional = true
+[dependencies.http-types]
+version = "2.10"
+optional = true
+
 [dependencies.web-sys]
 version = "0.3.40"
 features = [
