@@ -5,6 +5,7 @@ use linkedin_api_rs::prelude::{RedirectURL, Token, Config, LoginResponse};
 use serde::Serialize;
 use serde::Deserialize;
 use linkedin_api_rs::client::Client;
+use linkedin_api_rs::http_clinent::errors::ClientErr;
 
 
 // ------ ------
@@ -21,15 +22,15 @@ fn init(url: Url, orders: &mut impl Orders<Msg>) -> Model {
     }     else {
            login_respose  = Some(LoginResponse::extract_user_tokens(testing));
     }
+ orders.send_msg(
+     Msg::ConfigFetched(
+     Config::new(
+         "https://www.linkedin.com/oauth/v2/authorization".to_string(),
+         "78r2gfrobwen7a".to_string(),
+         "78r2gfrobwen7a".to_string(),
+         "http://localhost:8001/".to_string())
+ ));
 
-      log!(login_respose ) ;
-    orders.perform_cmd(async {
-        // Load config from some json.
-        // You can have a specific Api key here for facebook.
-        Msg::ConfigFetched(
-            async { fetch("/config.json").await?.check_status()?.json().await }.await,
-        )
-    });
     Model {
         redirect_url: RedirectURL::default(),
         login_response  :login_respose ,
@@ -88,9 +89,9 @@ pub struct Model {
 // ------ ------
 
 enum Msg {
-    ConfigFetched(fetch::Result<Config>),
+    ConfigFetched(Config),
     InitTokenConfig,
-   GetTokenConfig(fetch::Result<Config>) ,
+   GetTokenConfig(Config) ,
    GetToken,
    GetTokenResponse(Token) ,
    TestPost,
@@ -98,35 +99,42 @@ enum Msg {
    // GetAccount,
    // GetAccountSuccess(Data<Accounts>),
     // every error should user this
-    ResponseFailed(FetchError),
+    ResponseFailed(ClientErr),
 }
 
 // `update` describes how to handle each `Msg`.
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
-       Msg::ConfigFetched(Ok(config)) => model.redirect_url = RedirectURL::new(config).add_response_type("code").add_scope(&["r_liteprofile".to_string(),"r_emailaddress".to_string(),"w_member_social".to_string()]).add_full_url(),
-        Msg::ConfigFetched(Err(fetch_error)) => error!("Config fetch failed! Be sure to have config.json at the root of your project with client_id and redirect_uri", fetch_error),
+       Msg::ConfigFetched(config) =>{
+           log!(config);
+           model.redirect_url = RedirectURL::new(config)
+               .add_response_type("code")
+               .add_scope(&["r_liteprofile".to_string(),"r_emailaddress".to_string(),"w_member_social".to_string()]).add_full_url();
+           log!(model.redirect_url.full_url);
+       }
+        Msg::ConfigFetched(fetch_error) => error!("Config fetch failed! Be sure to have config.json at the root of your project with client_id and redirect_uri", fetch_error),
 
         Msg::InitTokenConfig =>{
 
-            orders.perform_cmd(async {
-                let url =  "https://api.linkedin.com/v2/ugcPosts";
-
+            orders.send_msg(
                 Msg::GetTokenConfig(
 
-                    async { fetch("/config.json")
-                        .await?.check_status()?.json().await }.await
-                )})     ;
+                    Config::new(
+                        "https://www.linkedin.com/oauth/v2/accessToken".to_string(),
+                        "78r2gfrobwen7a".to_string(),
+                        "78r2gfrobwen7a".to_string(),
+                        "http://localhost:8001/".to_string())
+                ))     ;
         }
 
-        Msg::GetTokenConfig(Ok(config))  => {
+        Msg::GetTokenConfig(config)  => {
             if let Some(access_code) = &model.login_response{
                 let code = &access_code.code;
                    model.token_exchange_url =  Some( RedirectURL::new(config).token_exchange_url(code.to_string()) );
             }
             log!(model.token_exchange_url )
     }
-        Msg::GetTokenConfig(Err(config_eror))         => {
+        Msg::GetTokenConfig(config_eror)         => {
 
         }
 
@@ -135,7 +143,7 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
                   let build_url =   token_url.full_url.clone();
                   orders.skip().perform_cmd(async move {
                        Client::accss_token(build_url.to_string().clone())
-                          .token()
+                          .get()
                           .await
                           .map_or_else(Msg::ResponseFailed, Msg::GetTokenResponse)
                   });

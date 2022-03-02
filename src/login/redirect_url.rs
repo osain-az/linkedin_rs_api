@@ -105,7 +105,7 @@ impl RedirectURL {
 
     /// Builds the redirect url for the login flow as a string so it may be
     /// passed through a GET request
-    pub fn build_redirect_url_as_string(&mut self) -> String {
+    pub fn build_login_url(&mut self) -> String {
         let full_url = "".to_string()
             + &self.linkedin_oath_url
             + "?response_type="
@@ -120,8 +120,7 @@ impl RedirectURL {
             + &self.scope;
         full_url
     }
-
-     fn build_token_exchange_url_as_string(&mut self,code:String) -> String {
+     fn build_token_exchange_url(&mut self, code:String) -> String {
         let full_url = "".to_string()
             + &self.linkedin_oath_url.replace("authorization","accessToken")
             + "?grant_type=authorization_code"
@@ -136,11 +135,11 @@ impl RedirectURL {
         full_url
     }
     pub fn add_full_url(mut self) -> Self {
-        self.full_url = self.build_redirect_url_as_string();
+        self.full_url = self.build_login_url();
         self
     }
     pub fn token_exchange_url(mut self, code:String) -> Self {
-        self.full_url = self.build_token_exchange_url_as_string(code);
+        self.full_url = self.build_token_exchange_url(code);
         self
     }
 

@@ -10,7 +10,7 @@ use ::reqwest::Body;
 use ::reqwest::Client;
 use async_trait::async_trait;
 use http::header::HeaderMap;
-use http::Method;
+use http::{Method, Response};
 
 //use reqwest::multipart;
 use reqwest::multipart::Form;
@@ -18,6 +18,7 @@ use reqwest::{Request, RequestBuilder};
 
 use serde_json::Value;
 use std::fs::File;
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestClient {
@@ -47,11 +48,22 @@ impl HttpClient for ReqwestClient {
     ) -> Result<http::Response<String>, ClientErr> {
         // No version on the response when using from client but works when using from server (backend)
         let version = request.version().clone();
-        let req = request.try_into().unwrap();
+        let body = request.body().clone();
+        let method = request.method().clone();
+        let url = request.uri().to_string();
 
-        let resp = self
-            .client
-            .execute(req)
+        let req = match method {
+            Method::GET => Client::new().get(url),
+            Method::POST => Client::new().post(url),
+            Method::PUT => Client::new().put(url),
+            Method::DELETE => Client::new().delete(url),
+            m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
+        };
+
+        let resp = req
+            .header("Content-Type","application/x-www-form-urlencoded")
+            .header( "Content-Length","0")
+            .send()
             .await
             .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
 
@@ -64,6 +76,52 @@ impl HttpClient for ReqwestClient {
             .await
             .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
         let mut build = http::Response::builder();
+        println!("{}", content);
+
+        for header in headers.iter() {
+            build = build.header(header.0, header.1);
+        }
+
+        build
+            .status(status_code)
+            .version(version)
+            .body(content)
+            .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))
+    }
+
+    async fn auth_request(
+        &self,
+        request: http::Request<String>
+    ) -> Result<http::Response<String>, ClientErr> {
+        // No version on the response when using from client but works when using from server (backend)
+        let version = request.version().clone();
+        let body = request.body().clone();
+        let method = request.method().clone();
+        let url = request.uri().to_string();
+        let token = "Bearer ".to_owned() + &body;
+        let req = match method {
+            Method::GET => Client::new().get(url),
+            Method::POST => Client::new().post(url),
+            m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
+        };
+
+        let resp = req
+            .header("Content-Type","application/x-www-form-urlencoded")
+            .header( "Authorization" ,token)
+            .send()
+            .await
+            .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+
+        let status_code = resp.status();
+        let headers = resp.headers().clone();
+        // No version on the response when using from client but works when using from server (backend)
+        // let version = resp.version();
+        let content = resp
+            .text()
+            .await
+            .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+        let mut build = http::Response::builder();
+        println!("{}", content);
 
         for header in headers.iter() {
             build = build.header(header.0, header.1);
@@ -79,6 +137,7 @@ impl HttpClient for ReqwestClient {
     async fn video_request(
         &self,
         request: http::Request<Value>,
+        token:String
     ) -> Result<http::Response<String>, ClientErr> {
         //et req: Request = request.try_into().unwrap();
         // let req: RequestBuilder = generic_req::<FormData>(request).unwrap();
@@ -94,8 +153,10 @@ impl HttpClient for ReqwestClient {
 
             m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
         };
+        let bear_token = "Bearer ".to_owned() + &token;
         let resp = req
             .header("X-Restli-Protocol-Version", "2.0.0")
+            .header("Authorization" ,bear_token)
             .json(&body)
             .send()
             .await
@@ -110,7 +171,6 @@ impl HttpClient for ReqwestClient {
             .text()
             .await
             .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
-
         let mut build = http::Response::builder();
 
         for header in headers.iter() {
@@ -126,13 +186,15 @@ impl HttpClient for ReqwestClient {
 
     async fn file_upload_request(
         &self,
-        request: http::Request<File>,
+        request: http::Request<Vec<u8>>,
+        token:String
     ) -> Result<http::Response<String>, ClientErr> {
         //et req: Request = request.try_into().unwrap();
         // let req: RequestBuilder = generic_req::<FormData>(request).unwrap();
         let url = request.uri().to_string();
         let method = request.method().clone();
-        let body = request.body().to_owned();
+        let body = request.body();
+        let bear_token = "Bearer ".to_owned() + &token;
 
         let req = match method {
             Method::GET => Client::new().get(url),
@@ -140,9 +202,14 @@ impl HttpClient for ReqwestClient {
             Method::PUT => Client::new().put(url),
             m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
         };
+       // let file_size = body.metadata().unwrap().len().clone();
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::io::prelude::*;
+
         let resp = req
-            .header("X-Restli-Protocol-Version", "2.0.0")
-            .body(Body::from(body))
+            .header("Authorization" ,bear_token)
+            .body(Body::from(body.to_vec()))
             .send()
             .await
             .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
@@ -151,7 +218,6 @@ impl HttpClient for ReqwestClient {
         let status_code = resp.status();
         let headers = resp.headers().clone();
         //let version = resp.version();
-
         let content = resp
             .text()
             .await

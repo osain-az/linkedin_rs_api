@@ -1,60 +1,30 @@
-// https://github.com/serde-rs/serde/issues/868
-// https://users.rust-lang.org/t/need-help-with-serde-deserialize-with/18374
 
 use serde::{
+    Serialize,
     de::{self, DeserializeOwned},
     Deserialize, Deserializer,
 };
 use serde_json::Value;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[allow(dead_code)]
-pub struct Uploading {
-    #[serde(
-        rename(deserialize = "com"),
-        deserialize_with = "deserialize_something"
-    )]
+pub struct UploadingUrl {
     pub uploadUrl: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ImageInitResponse {
     pub value: Values,
 }
-#[derive(Serialize, Deserialize)]
+#[derive( Deserialize,Serialize, Debug)]
 pub struct Values {
     pub mediaArtifact: String,
     pub asset: String,
-    pub uploadMechanism: Uploading,
+    pub uploadMechanism:UploadMechanism
 }
 
-fn main() {
-    let json_string = r#"
-        {
-            "com": {
-                "linkedin": {
-                    "digitalmedia" : {
-                        "uploading": {
-                          "MediaUploadHttpRequest":{
-                            "uploadUrl": 1234
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    "#;
-    let sws = serde_json::from_str::<Uploading>(json_string).unwrap();
-    println!("{sws:#?}");
-}
-
-fn deserialize_something<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: DeserializeOwned,
-{
-    let mut json: Value = de::Deserialize::deserialize(deserializer)?;
-    let smth =
-        json["linkedin"]["digitalmedia"]["uploading"]["MediaUploadHttpRequest"]["uploadUrl"].take();
-    serde_json::from_value(smth).map_err(de::Error::custom)
+#[derive(Deserialize, Serialize, Debug)]
+ pub struct UploadMechanism {
+    #[serde(rename = "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest")]
+   pub  media_upload_http_request: UploadingUrl
 }

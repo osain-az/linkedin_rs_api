@@ -62,18 +62,31 @@ pub trait HttpClient: Sync + Clone {
         &self,
         url: Url,
         request_body: Value,
+        token:String
     ) -> Result<Response<String>, ClientErr> {
-        self.video_request(Request::post(url.to_string()).body(request_body).unwrap())
+        self.video_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
             .await
     }
+
+    #[inline]
+    async fn authentication(
+        &self,
+        url: Url,
+        token: String,
+    ) -> Result<Response<String>, ClientErr> {
+        self.auth_request(Request::get(url.to_string()).body(token).unwrap())
+            .await
+    }
+
     #[cfg(any(feature = "reqwest_async"))]
     #[inline]
     async fn file_upload(
         &self,
         url: Url,
-        request_body: File,
+        request_body: Vec<u8>,
+        token:String
     ) -> Result<Response<String>, ClientErr> {
-        self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap())
+        self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
             .await
     }
 
@@ -103,62 +116,32 @@ pub trait HttpClient: Sync + Clone {
         )
         .await
     }
-    #[inline]
-    async fn patch<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
-    where
-        Self: Sized,
-        T: Into<String> + Send,
-    {
-        self.request(
-            Request::patch(url.to_string())
-                .body(request_body.into())
-                .unwrap(),
-        )
-        .await
-    }
 
-    #[inline]
-    async fn head<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
-    where
-        Self: Sized,
-        T: Into<String> + Send,
-    {
-        self.request(
-            Request::head(url.to_string())
-                .body(request_body.into())
-                .unwrap(),
-        )
-        .await
-    }
-
-    #[inline]
-    async fn options<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
-    where
-        Self: Sized,
-        T: Into<String> + Send,
-    {
-        self.request(
-            Request::options(url.to_string())
-                .body(request_body.into())
-                .unwrap(),
-        )
-        .await
-    }
 
     async fn request(&self, request: Request<String>) -> Result<Response<String>, ClientErr>
     where
         Self: Sized;
 
     #[cfg(any(feature = "reqwest_async"))]
-    async fn video_request(&self, request: Request<Value>) -> Result<Response<String>, ClientErr>
+    async fn video_request(&self, request: Request<Value>, token:String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized;
 
     #[cfg(any(feature = "reqwest_async"))]
     async fn file_upload_request(
         &self,
-        request: Request<File>,
+        request: Request<Vec<u8>>,
+        token:String
     ) -> Result<Response<String>, ClientErr>
     where
         Self: Sized;
+
+    #[cfg(any(feature = "reqwest_async"))]
+    async fn auth_request(
+        &self,
+        request: Request<String>,
+    ) -> Result<Response<String>, ClientErr>
+        where
+            Self: Sized;
 }
+
