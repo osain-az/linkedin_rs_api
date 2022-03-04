@@ -84,10 +84,17 @@ pub trait HttpClient: Sync + Clone {
         &self,
         url: Url,
         request_body: Vec<u8>,
-        token:String
+        token:String,
+        upload_type:&str
     ) -> Result<Response<String>, ClientErr> {
-        self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
-            .await
+        if upload_type == "PARTS" {
+            self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
+                .await
+        }else {
+            self.file_upload_request(Request::put(url.to_string()).body(request_body).unwrap(),token)
+                .await
+        }
+
     }
 
     #[inline]
