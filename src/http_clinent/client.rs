@@ -85,13 +85,12 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
     {
         let client = HttpC::new(None)?;
         let resp = client.video_post(build_url.parse().unwrap(), body, access_token).await?;
-        println!("result, {:?}", resp);
         let result = deserialize_response::<R>(resp.body())?;
         Ok(result)
     }
 
     #[cfg(any(feature = "reqwest_async"))]
-    pub async fn file_upload_post<R>(build_url: String, body: Vec<u8>, token:String) -> Result<String, ClientErr>
+    pub async fn file_upload_post<R>(build_url: String, body: Vec<u8>, token:String, upload_type:String) -> Result<String, ClientErr>
     where
         Self: Sized,
        // R: DeserializeOwned, // response Type
@@ -99,7 +98,7 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
 
     {
         let client = HttpC::new(None)?;
-        let resp = client.file_upload(build_url.parse().unwrap(), body,token).await;
+        let resp = client.file_upload(build_url.parse().unwrap(), body,token,upload_type).await;
         if resp.is_ok(){
             println!("print from side: {}", resp.unwrap().status());
             let result  =  "201".to_string();

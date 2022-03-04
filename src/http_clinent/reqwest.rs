@@ -153,14 +153,24 @@ impl HttpClient for ReqwestClient {
 
             m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
         };
-        let bear_token = "Bearer ".to_owned() + &token;
-        let resp = req
-            .header("X-Restli-Protocol-Version", "2.0.0")
-            .header("Authorization" ,bear_token)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+       let resp =  if token.is_empty() {
+           let resp = req
+               .header("X-Restli-Protocol-Version", "2.0.0")
+               .json(&body)
+               .send()
+               .await
+               .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+        }else {
+           let bear_token = "Bearer ".to_owned() + &token;
+           let resp = req
+               .header("X-Restli-Protocol-Version", "2.0.0")
+               .header("Authorization" ,bear_token)
+               .json(&body)
+               .send()
+               .await
+               .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+        };
+
         // No version on the response when using from client but works when using from server (backend)
         let version = request.version();
         let status_code = resp.status();
@@ -206,13 +216,21 @@ impl HttpClient for ReqwestClient {
         use std::fs::File;
         use std::io::BufReader;
         use std::io::prelude::*;
+         if method == Method::PUT{
+             let resp = req
+                 .body(Body::from(body.to_vec()))
+                 .send()
+                 .await
+                 .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+         }else {
+             let resp = req
+                 .header("Authorization" ,bear_token)
+                 .body(Body::from(body.to_vec()))
+                 .send()
+                 .await
+                 .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
+         }
 
-        let resp = req
-            .header("Authorization" ,bear_token)
-            .body(Body::from(body.to_vec()))
-            .send()
-            .await
-            .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?;
         // No version on the response when using from client but works when using from server (backend)
         let version = request.version();
         let status_code = resp.status();

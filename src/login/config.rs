@@ -13,6 +13,12 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn new(linkedin_oath_url: String, client_id: String, client_secret: String, redirect_uri: String) -> Self {
+        Config { linkedin_oath_url, client_id, client_secret, redirect_uri }
+    }
+}
+
+impl Config {
     pub fn linkedin_oath_url(&self) -> &str {
         &self.linkedin_oath_url
     }

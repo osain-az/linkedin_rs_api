@@ -1,10 +1,12 @@
 use crate::http_clinent::client::HttpConnection;
 use crate::http_clinent::errors::ClientErr;
 
-use crate::share::srtuct_helper::{ImageInitResponse, UploadingUrl};
-use crate::share::utils::{create_data, create_file_upload_data};
+use crate::share::srtuct_helper::{MediaUploadInitResponse, UploadingUrl, VideoPartUploadInitResponse};
+use crate::share::utils::{create_data, create_file_upload_data, MediaAnalyze, init_media_upload_data};
+
 use serde_json::json;
 use std::fs::File;
+use crate::share::file_utils::FileChunking;
 
 #[derive(Clone)]
 pub struct SharePost {
@@ -34,36 +36,27 @@ impl SharePost {
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
         let data = create_data("ARTICLE", description, person_id, source_url);
         let url = &self.base_url;
-       println!("contnet{:?} ",data);
         let resp = HttpConnection::video_post::<String>(url.to_string(), data, self.access_token.clone()).await?;
         Ok(resp)
     }
 
-     async fn init_image_post(self) -> Result<ImageInitResponse, ClientErr> {
+     async fn init_media_upload(self, media_type:&str) -> Result<MediaUploadInitResponse, ClientErr> {
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
         let url = &self.base_url.replace("ugcPosts","assets?action=registerUpload");
 
-        let data = json!({
+         let resp  = if media_type == "IMAGE" {
+            let data =    init_media_upload_data("IMAGE","",person_id);
+             HttpConnection::video_post::<MediaUploadInitResponse>(url.to_string(), data, self.access_token).await?
 
-                "registerUploadRequest": {
-                    "recipes": [
-                        "urn:li:digitalmediaRecipe:feedshare-image"
-                    ],
-                    "owner":  person_id,
-                    "serviceRelationships": [
-                        {
-                            "relationshipType": "OWNER",
-                            "identifier": "urn:li:userGeneratedContent"
-                        }
-                    ]
-                }
-        });
+         }else {
+             let data=   init_media_upload_data("VIDEO","",person_id);
+             HttpConnection::video_post::<MediaUploadInitResponse>(url.to_string(), data, "".to_string()).await?
+         };
 
-        let resp = HttpConnection::video_post::<ImageInitResponse>(url.to_string(), data, self.access_token).await?;
         Ok(resp)
     }
 
-       async fn upload_image(self, upload_url :String, buffer_file:Vec<u8>)->Result<String,ClientErr> {
+       async fn upload_media(self, upload_url :String, buffer_file:Vec<u8>) ->Result<String,ClientErr> {
           let token = self.access_token.clone();
            let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
 
@@ -71,16 +64,16 @@ impl SharePost {
           Ok(resp)
     }
 
-    pub async fn post_with_image(self, buffer_file:  Vec<u8>, post_description:String, image_title:String, image_description:String) -> Result<String,ClientErr>{
+    pub async fn post_with_image_upload(self, buffer_file:  Vec<u8>, post_description:String, image_title:String, image_description:String) -> Result<String,ClientErr>{
          let token = self.access_token.clone();
         let url = self.base_url.clone();
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
-        let resp = self.clone().init_image_post().await; // send init request
+        let resp = self.clone().init_media_upload("IMAGE").await; // send init request
 
         if resp.is_ok() {
              let data = resp.unwrap();
              let media_aset = data.value.asset.clone();
-            let res =  self.clone().upload_image(data.value.uploadMechanism.media_upload_http_request.uploadUrl,buffer_file).await;
+            let res =  self.clone().upload_media(data.value.uploadMechanism.media_upload_http_request.uploadUrl, buffer_file).await;
 
             if res.is_ok() {
                 let data = create_file_upload_data(
@@ -103,5 +96,59 @@ impl SharePost {
         } else {
           Err(ClientErr::LinkedinError(format!("Error in initiazing  images post, try again.  Err message: {:?}",resp.err())))
         }
+    }
+
+
+    async fn init_part_video_upload(self, media_type:&str, video_type:&str) -> Result<VideoPartUploadInitResponse, ClientErr> {
+        let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
+        let url = &self.base_url.replace("ugcPosts","assets?action=registerUpload");
+
+        let data = init_media_upload_data("VIDEO","",person_id);
+        let resp = HttpConnection::video_post::<VideoPartUploadInitResponse>(url.to_string(), data, "".to_string()).await?;
+        Ok(resp)
+    }
+
+    pub async fn post_with_video_upload(self, video_file:File, post_description:String, image_title:String, image_description:String) {
+        let token = self.access_token.clone();
+        let url = self.base_url.clone();
+        let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
+
+        let file = &video_file;
+        let file_analyze = MediaAnalyze::default().file_analyze(file.clone());
+       if file_analyze.upload_method()  == "normal_upload"{
+          let resp =    self.clone().init_media_upload("VIDEO",).await?;// send init request
+
+       }else {
+
+         let file_chunk = FileChunking::new(file);
+           let mut chunking = Some(true) ;
+           while let  Some (is_chunking)  = chunking {
+
+               if !file_chunk.is_completed() {
+                  let chunked_data =  file_chunk.chunk_by_5mb();
+                   let res = self.upload_media().await;
+               }else {
+
+               }
+
+           }
+        }
+
+
+        if resp.is_ok() {
+
+             if file_analyze.upload_method() == "normal_upload"  {
+                 let data = resp.unwrap();
+                 let media_aset = data.value.asset.clone();
+                 let res =  self.clone().upload_media(data.value.uploadMechanism.media_upload_http_request.uploadUrl, buffer_file).await;
+             }else {
+
+             }
+        }else {
+
+        }
+
+
+
     }
 }
