@@ -21,8 +21,8 @@ use reqwest::multipart::Form;
 //#[async_trait(?Send)]
 
 use serde_json::Value;
-use url::Url;
 use std::fs::File;
+use url::Url;
 
 #[cfg(any(feature = "reqwest_async"))]
 pub type HttpConnection = GenericClientConnection<ReqwestClient>;
@@ -49,7 +49,9 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
         T: DeserializeOwned, // response Type
     {
         let client = HttpC::new(None)?;
-        let resp = client.authentication(build_url.parse().unwrap(), token).await?;
+        let resp = client
+            .authentication(build_url.parse().unwrap(), token)
+            .await?;
         let result = deserialize_response::<T>(resp.body())?;
         Ok(result)
     }
@@ -77,38 +79,52 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
     }
 
     #[cfg(any(feature = "reqwest_async"))]
-    pub async fn video_post<R>(build_url: String, body: Value, access_token:String) -> Result<R, ClientErr>
+    pub async fn video_post<R>(
+        build_url: String,
+        body: Value,
+        access_token: String,
+    ) -> Result<R, ClientErr>
     where
         Self: Sized,
         R: DeserializeOwned, // response Type
                              //T: Send + DeserializeOwned,
     {
         let client = HttpC::new(None)?;
-        let resp = client.video_post(build_url.parse().unwrap(), body, access_token).await?;
+        let resp = client
+            .video_post(build_url.parse().unwrap(), body, access_token)
+            .await?;
         let result = deserialize_response::<R>(resp.body())?;
         Ok(result)
     }
 
     #[cfg(any(feature = "reqwest_async"))]
-    pub async fn file_upload_post<R>(build_url: String, body: Vec<u8>, token:String, upload_type:String) -> Result<String, ClientErr>
+    pub async fn file_upload_post<R>(
+        build_url: String,
+        body: Vec<u8>,
+        token: String,
+        upload_type: String,
+    ) -> Result<String, ClientErr>
     where
         Self: Sized,
-       // R: DeserializeOwned, // response Type
+        // R: DeserializeOwned, // response Type
         R: Into<String> + Send,
-
     {
         let client = HttpC::new(None)?;
-        let resp = client.file_upload(build_url.parse().unwrap(), body,token,upload_type).await;
-        if resp.is_ok(){
+        let resp = client
+            .file_upload(build_url.parse().unwrap(), body, token, &upload_type)
+            .await;
+        if resp.is_ok() {
             println!("print from side: {}", resp.unwrap().status());
-            let result  =  "201".to_string();
+            let result = "201".to_string();
             Ok(result)
-        }else {
-            Err(ClientErr::LinkedinError(format!("Something went wrong.  Err message: {:?}",resp.err())))
-
+        } else {
+            Err(ClientErr::LinkedinError(format!(
+                "Something went wrong.  Err message: {:?}",
+                resp.err()
+            )))
         }
 
-     /*   let result = deserialize_response::<String>(resp.body())?;
-           Ok(result)*/
+        /*   let result = deserialize_response::<String>(resp.body())?;
+        Ok(result)*/
     }
 }
