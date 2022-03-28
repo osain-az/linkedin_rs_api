@@ -1,5 +1,5 @@
 use crate::account::AccountApi;
-use crate::prelude::SharePost;
+use crate::prelude::{VideoApi, SharePost, PostAPI};
 
 #[derive(Debug)]
 pub struct Client {
@@ -54,5 +54,21 @@ impl Client {
     ) -> SharePost {
        let base_url =  Client::default().base_url.replace("NODE/", "ugcPosts");
         SharePost::new(base_url,person_id, access_token)
+    }
+    pub fn video_upload(
+        &self,
+        person_id:String,
+        access_token : String
+    ) -> VideoApi {
+       let base_url =  Client::default().base_url.replace("NODE/", "videos?");
+        VideoApi::new(base_url, person_id, access_token)
+    }
+    pub fn publish_video(
+        &self,
+        person_id:String,
+        access_token : String
+    ) -> PostAPI {
+       let base_url =  Client::default().base_url.replace("NODE/", "posts?");
+        PostAPI::new(base_url, person_id, access_token)
     }
 }
