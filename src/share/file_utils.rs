@@ -2,6 +2,7 @@ use serde::{
     de::{self, DeserializeOwned},
     Deserialize, Deserializer, Serialize,
 };
+use std::os::unix::fs::FileExt;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -79,7 +80,7 @@ impl FileChunking {
             return buf.to_vec();
         }
     }
-    pub fn extract_by_size_and_offset(mut self, extract_to_size: usize, offset: u64) -> Vec<u8> {
+    pub fn extract_by_size_and_offset(mut self, extract_to_size: u64, offset: u64) -> Vec<u8> {
         let mut chunk_size = 4194303;
         let mut buffer = [0u8; 4194303];
         let position = self.postition.clone();
@@ -93,17 +94,17 @@ impl FileChunking {
             let mut buffer = Vec::new();
             file.seek(SeekFrom::Start(offset)).unwrap();
             file.read_to_end(&mut buffer);
-
             return buffer.to_vec();
         } else {
             let chunk_position = if position < 2 { position } else { position - 1 };
 
-            file.seek(SeekFrom::Start(offset - 1)).unwrap();
+            //let mut buffer = vec![0u8, extract_to_size as];
+          //  file.read_exact(&mut buffer);
+            file.read_exact_at(&mut buffer,offset);
 
-            let mut buffer = vec![0u8, extract_to_size as u8];
-            file.read_exact(&mut buffer);
             return buffer.to_vec();
         }
+
     }
     pub fn extract_to_end(self) -> Vec<u8> {
         let mut buffer = vec![];
