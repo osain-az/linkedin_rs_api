@@ -2,7 +2,6 @@ use crate::http_clinent::client::HttpConnection;
 use crate::http_clinent::errors::ClientErr;
 use crate::share::file_utils::FileChunking;
 use crate::video::utils::{InitVideoParams, InitVideoResponse, UploadingVideos, VideoUploadStatus};
-use seed::video;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 
@@ -28,8 +27,7 @@ impl VideoApi {
     ) -> Result<InitVideoResponse, ClientErr> {
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
 
-        //videos?action=initializeUpload
-        let url = &self.base_url.clone();
+         let url = self.base_url.to_owned()+"action=initializeUpload";
         let resp = HttpConnection::video_post::<InitVideoResponse>(
             url.to_string(),
             serde_json::to_value(&init_params).unwrap(),
@@ -48,7 +46,7 @@ impl VideoApi {
             upload_url,
             buffer_file,
             token,
-            "VIDEO".to_string(),
+            "PARTS".to_string(),
         )
         .await?;
         Ok(resp)
@@ -60,7 +58,7 @@ impl VideoApi {
     ) -> Result<String, ClientErr> {
         let url = self.base_url + "action=finalizeUpload";
         let token = self.access_token.clone();
-        let resp = HttpConnection::video_post::<String>(
+        let resp = HttpConnection::request_empty_body::<String>(
             url,
             serde_json::to_value(&uploading_data).unwrap(),
             token,
@@ -69,10 +67,11 @@ impl VideoApi {
         Ok(resp)
     }
 
-    async fn upload_status(self, video_id: String) -> Result<VideoUploadStatus, ClientErr> {
-        let url = self.base_url + "action=finalizeUpload";
+    pub async fn upload_status(self, video_id: String) -> Result<VideoUploadStatus, ClientErr> {
+        let base_url   = self.base_url.replace("?","/");
+        let url =  base_url+&video_id;
         let token = self.access_token.clone();
-        let resp = HttpConnection::get::<VideoUploadStatus>(url, video_id).await?;
+        let resp = HttpConnection::get::<VideoUploadStatus>(url, "".to_string(), token).await?;
         Ok(resp)
     }
 
@@ -84,8 +83,8 @@ impl VideoApi {
         let token = self.clone().access_token.clone();
         let url = self.clone().base_url.clone();
         let mut etag_list: Vec<String> = Vec::new();
-
         let single_upload_size = 4194303; // 4 biytes
+
         if file_list.main_video.is_none() {
             //dont run the rest of the code
             Err(ClientErr::LinkedinError(format!(
@@ -96,11 +95,13 @@ impl VideoApi {
             let file_size = video_file.metadata().unwrap().len();
 
             //it seems like linked allows max of 4mb of upload so it is greater than that then chunk it
+            let video_params = init_params.clone();
+
             if file_size < single_upload_size {
-                let video_params = init_params.clone();
-                let resp = self.clone().init_video_upload(init_params).await; // send init request
+                let resp = self.clone().init_video_upload(video_params.clone()).await; // send init request
 
                 if resp.is_ok() {
+
                     let video_init_resp = resp.as_ref().unwrap().clone();
                     let buffer_file = FileChunking::new(video_file).extract_to_end();
                     //this is for single upload  so the upload uploading should be array of length 1
@@ -149,11 +150,12 @@ impl VideoApi {
 
                         let data = FinalUploadData::new(confrim_data);
                         let final_resp = self.clone().confirm_final_upload(data).await?;
-
-                        let status_resp = self
+                        let status_resp  = self
                             .clone()
                             .upload_status(video_init_resp.value.video)
                             .await?;
+                        println!("status_resp {:?}" ,status_resp);
+
                         Ok(status_resp)
                     } else {
                         Err(ClientErr::LinkedinError(format!(
@@ -168,9 +170,9 @@ impl VideoApi {
                     )))
                 }
             } else {
-                let file_chunk = FileChunking::new(video_file.try_clone().unwrap());
-
                 let video_init_resp = self.clone().init_video_upload(init_params).await?; // send init request
+
+                let file_chunk = FileChunking::new(video_file.try_clone().unwrap());
 
                 let uploading_list = video_init_resp.clone().value.uploadInstructions.clone();
                 let caption_url = video_init_resp.clone().value.captionsUploadUrl;
@@ -184,7 +186,7 @@ impl VideoApi {
                     let previous_position = upload_data.firstByte.clone();
 
                     let chunk_data = FileChunking::new(video_file.try_clone().unwrap())
-                        .extract_by_size_and_offset(upload_size as usize, previous_position);
+                        .extract_by_size_and_offset(upload_size , previous_position);
 
                     let etag_resp = self.clone().upload_media(upload_url, chunk_data).await?;
                     etag_list.push(etag_resp);
@@ -207,19 +209,22 @@ impl VideoApi {
                 let confrim_data = UploadConfrimationRequest::new(
                     upload_video_id.clone(),
                     upload_token,
-                    etag_list,
+                    etag_list.clone(),
                 );
+                println!("etag lsis {:?}",etag_list.len() );
+
                 let data = FinalUploadData::new(confrim_data);
                 let final_resp = self.clone().confirm_final_upload(data).await?;
-
+                  println!("confirmation {}",final_resp );
                 let status_resp = self.clone().upload_status(upload_video_id.clone()).await?;
+                println!("staus{:?}",status_resp );
                 Ok(status_resp)
             }
         }
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 struct FinalUploadData {
     pub finalizeUploadRequest: UploadConfrimationRequest,
 }
@@ -232,7 +237,7 @@ impl FinalUploadData {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 struct UploadConfrimationRequest {
     video: String,
     uploadToken: String,
