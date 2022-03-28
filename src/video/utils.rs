@@ -35,13 +35,25 @@ impl UploadingVideos {
 }
 
 #[derive(Deserialize, Serialize, Clone, Default)]
-pub struct InitVideoParams {
+pub struct  InitializeUploadRequest{
     pub owner: String,
     pub purpose: String,
     pub fileSizeBytes: u64,
     pub uploadCaptions: bool,
     pub uploadThumbnail: bool,
 }
+
+impl InitializeUploadRequest {
+    pub fn new(owner: String, purpose: String, fileSizeBytes: u64, uploadCaptions: bool, uploadThumbnail: bool) -> Self {
+        InitializeUploadRequest { owner, purpose, fileSizeBytes, uploadCaptions, uploadThumbnail }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct InitVideoParams {
+    initializeUploadRequest : InitializeUploadRequest
+}
+
 
 impl InitVideoParams {
     pub fn new(
@@ -51,48 +63,55 @@ impl InitVideoParams {
         uploadThumbnail: bool,
         owner: String,
     ) -> Self {
+
         InitVideoParams {
-            purpose,
-            fileSizeBytes,
-            uploadCaptions,
-            uploadThumbnail,
-            owner,
+          initializeUploadRequest: InitializeUploadRequest::new(
+              owner,
+              purpose,
+              fileSizeBytes,
+              uploadCaptions,
+              uploadThumbnail,
+          )
         }
     }
 
-    pub fn set_owner(&mut self, owner: String) {
-        self.owner = owner;
+    pub fn set_owner(&mut  self, onwer: String) {
+        self.initializeUploadRequest.owner = onwer;
     }
     pub fn set_purpose(&mut self, purpose: String) {
-        self.purpose = purpose;
+        self.initializeUploadRequest.purpose = purpose;
+
     }
-    pub fn set_fileSizeBytes(&mut self, fileSizeBytes: u64) {
-        self.fileSizeBytes = fileSizeBytes;
+    pub fn set_file_size(&mut self, file_size: u64){
+        self.initializeUploadRequest.fileSizeBytes = file_size;
     }
-    pub fn set_uploadCaptions(&mut self, uploadCaptions: bool) {
-        self.uploadCaptions = uploadCaptions;
+    pub fn set_is_upload_caption(&mut self, is_upload_caption: bool){
+        self.initializeUploadRequest.uploadCaptions =is_upload_caption;
     }
-    pub fn set_uploadThumbnail(&mut self, uploadThumbnail: bool) {
-        self.uploadThumbnail = uploadThumbnail;
+    pub fn set_is_upload_thumbnails(&mut self, is_upload_thumbnails: bool) {
+        self.initializeUploadRequest.uploadThumbnail = is_upload_thumbnails;
     }
+
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct InitVideoResponse {
     pub value: Values,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Clone,Debug)]
 pub struct Values {
     pub uploadUrlsExpireAt: u64,
     pub video: String,
     pub uploadInstructions: Vec<UploadInstructions>,
     pub uploadToken: String,
+    #[serde(default = "default_field_val")]
     pub captionsUploadUrl: String,
+    #[serde(default = "default_field_val")]
     pub thumbnailUploadUrl: String,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct UploadInstructions {
     pub lastByte: u64,
     pub firstByte: u64,
@@ -116,4 +135,8 @@ impl VideoUploadStatus {
     pub fn status(&self) -> &str {
         &self.status
     }
+}
+
+fn default_field_val() -> String{
+    "".to_string()
 }
