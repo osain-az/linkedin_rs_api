@@ -102,7 +102,7 @@ impl SharePost {
 
     pub async fn post_with_image_upload(
         self,
-        buffer_file: Vec<u8>,
+         file: File,
         post_description: String,
         image_title: String,
         image_description: String,
@@ -115,6 +115,7 @@ impl SharePost {
         if resp.is_ok() {
             let data = resp.unwrap();
             let media_aset = data.value.asset.clone();
+            let  buffer_file = FileChunking::new(file).extract_to_end();
             let res = self
                 .clone()
                 .upload_media(
@@ -173,44 +174,14 @@ impl SharePost {
         Ok(resp)
     }
 
-    /* pub async fn post_with_video_upload(self, video_file:File, post_description:String, image_title:String, image_description:String) {
+     pub async fn post_with_video_upload(self, video_file:File, post_description:String, _title:String, image_description:String) {
         let token = self.access_token.clone();
         let url = self.base_url.clone();
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
 
         let file = &video_file;
         let file_analyze = MediaAnalyze::default().file_analyze(file.clone());
-       if file_analyze.upload_method()  == "normal_upload"{
-          let resp =    self.clone().init_media_upload("VIDEO",).await?;// send init request
-
-       }else {
-
-         let file_chunk = FileChunking::new(file);
-           let mut chunking = Some(true) ;
-           while let  Some (is_chunking)  = chunking {
-
-               if !file_chunk.is_completed() {
-                  let chunked_data =  file_chunk.chunk_by_5mb();
-                   let res = self.upload_media().await;
-               }else {
-
-               }
-
-           }
-        }
 
 
-        if resp.is_ok() {
-
-             if file_analyze.upload_method() == "normal_upload"  {
-                 let data = resp.unwrap();
-                 let media_aset = data.value.asset.clone();
-                 let res =  self.clone().upload_media(data.value.uploadMechanism.media_upload_http_request.uploadUrl, buffer_file).await;
-             }else {
-
-             }
-        }else {
-
-        }
-    }*/
+    }
 }
