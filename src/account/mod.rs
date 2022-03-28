@@ -23,7 +23,7 @@ impl AccountApi {
     }
 
     pub async fn get(&self) -> Result<Token, ClientErr> {
-    let resp = HttpConnection::post::<Token,String>(self.base_url.to_string(),"".to_string()).await?;
+    let resp = HttpConnection::post::<Token,String>(self.base_url.to_string(),"".to_string(),"".to_string()).await?;
         Ok(resp)
     }
 

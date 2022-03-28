@@ -18,6 +18,7 @@ use reqwest::{Request, RequestBuilder};
 
 use serde_json::Value;
 use std::fs::File;
+use seed::header;
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,7 @@ impl HttpClient for ReqwestClient {
     async fn request(
         &self,
         request: http::Request<String>,
+        token:String
     ) -> Result<http::Response<String>, ClientErr> {
         // No version on the response when using from client but works when using from server (backend)
         let version = request.version().clone();
@@ -59,9 +61,10 @@ impl HttpClient for ReqwestClient {
             Method::DELETE => Client::new().delete(url),
             m @ _ => return Err(ClientErr::HttpClient(format!("invalid method {}", m))),
         };
-
+          let bear_token = "Bearer ".to_owned() +&token;
         let resp = req
             .header("Content-Type", "application/x-www-form-urlencoded")
+            .header("Authorization", bear_token)
             .header("Content-Length", "0")
             .send()
             .await
@@ -144,7 +147,6 @@ impl HttpClient for ReqwestClient {
         let url = request.uri().to_string();
         let method = request.method().clone();
         let body = request.body().to_owned();
-
         let req = match method {
             Method::GET => Client::new().get(url),
             Method::POST => Client::new().post(url),
@@ -162,6 +164,7 @@ impl HttpClient for ReqwestClient {
         } else {
             let bear_token = "Bearer ".to_owned() + &token;
             req.header("X-Restli-Protocol-Version", "2.0.0")
+                .header("Content-Type", "application/json")
                 .header("Authorization", bear_token)
                 .json(&body)
                 .send()
@@ -215,7 +218,10 @@ impl HttpClient for ReqwestClient {
         use std::io::prelude::*;
         use std::io::BufReader;
         let resp = if method == Method::PUT {
-            req.body(Body::from(body.to_vec()))
+            println!("printing here ");
+            req.header("Content-Type","application/octet-stream" )
+                .header("Authorization", bear_token)
+                .body(Body::from(body.to_vec()))
                 .send()
                 .await
                 .map_err(|e| ClientErr::HttpClient(format!("{:?}", e)))?

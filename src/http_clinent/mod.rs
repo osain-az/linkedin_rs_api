@@ -30,7 +30,7 @@ pub trait HttpClient: Sync + Clone {
         Self: Sized;
 
     #[inline]
-    async fn get<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
+    async fn get<T>(&self, url: Url, request_body: T, token:String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized,
         T: Into<String> + Send,
@@ -39,11 +39,12 @@ pub trait HttpClient: Sync + Clone {
             Request::get(url.to_string())
                 .body(request_body.into())
                 .unwrap(),
+            token
         )
         .await
     }
     #[inline]
-    async fn post<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
+    async fn post<T>(&self, url: Url, request_body: T, token:String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized,
         T: Into<String> + Send,
@@ -52,6 +53,7 @@ pub trait HttpClient: Sync + Clone {
             Request::post(url.to_string())
                 .body(request_body.into())
                 .unwrap(),
+            token
         )
         .await
     }
@@ -85,20 +87,20 @@ pub trait HttpClient: Sync + Clone {
         url: Url,
         request_body: Vec<u8>,
         token:String,
-        upload_type:&str
+        upload_type:String
     ) -> Result<Response<String>, ClientErr> {
-        if upload_type == "PARTS" {
-            self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
+        if upload_type == "PARTS".to_string() {
+            self.file_upload_request(Request::put(url.to_string()).body(request_body).unwrap(),token)
                 .await
         }else {
-            self.file_upload_request(Request::put(url.to_string()).body(request_body).unwrap(),token)
+            self.file_upload_request(Request::post(url.to_string()).body(request_body).unwrap(),token)
                 .await
         }
 
     }
 
     #[inline]
-    async fn put<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
+    async fn put<T>(&self, url: Url, request_body: T, token:String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized,
         T: Into<String> + Send,
@@ -107,11 +109,12 @@ pub trait HttpClient: Sync + Clone {
             Request::put(url.to_string())
                 .body(request_body.into())
                 .unwrap(),
+            token
         )
         .await
     }
     #[inline]
-    async fn delete<T>(&self, url: Url, request_body: T) -> Result<Response<String>, ClientErr>
+    async fn delete<T>(&self, url: Url, request_body: T, token:String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized,
         T: Into<String> + Send,
@@ -120,12 +123,14 @@ pub trait HttpClient: Sync + Clone {
             Request::delete(url.to_string())
                 .body(request_body.into())
                 .unwrap(),
+            token
+
         )
         .await
     }
 
 
-    async fn request(&self, request: Request<String>) -> Result<Response<String>, ClientErr>
+    async fn request(&self, request: Request<String>, token: String) -> Result<Response<String>, ClientErr>
     where
         Self: Sized;
 
