@@ -33,13 +33,14 @@ pub struct GenericClientConnection<HttpC: HttpClient> {
     url: Url,
 }
 impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
-    pub async fn get<T>(build_url: String, body: String) -> Result<T, ClientErr>
+    pub async fn get<T>(build_url: String, body: String, token:String) -> Result<T, ClientErr>
     where
         Self: Sized,
         T: DeserializeOwned, // response Type
     {
         let client = HttpC::new(None)?;
-        let resp = client.get(build_url.parse().unwrap(), body).await?;
+        let resp = client.get(build_url.parse().unwrap(), body, token).await?;
+
         let result = deserialize_response::<T>(resp.body())?;
         Ok(result)
     }
@@ -56,24 +57,24 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
         Ok(result)
     }
 
-    pub async fn post<R, T>(build_url: String, body: T) -> Result<R, ClientErr>
+    pub async fn post<R, T>(build_url: String, body: T, token:String) -> Result<R, ClientErr>
     where
         Self: Sized,
         R: DeserializeOwned, // response Type
         T: Into<String> + Send,
     {
         let client = HttpC::new(None)?;
-        let resp = client.post(build_url.parse().unwrap(), body).await?;
+        let resp = client.post(build_url.parse().unwrap(), body, token).await?;
         let result = deserialize_response::<R>(resp.body())?;
         Ok(result)
     }
-    pub async fn delete<R>(build_url: String, body: String) -> Result<R, ClientErr>
+    pub async fn delete<R>(build_url: String, body: String, token : String) -> Result<R, ClientErr>
     where
         Self: Sized,
         R: DeserializeOwned, // response Type
     {
         let client = HttpC::new(None)?;
-        let resp = client.delete(build_url.parse().unwrap(), body).await?;
+        let resp = client.delete(build_url.parse().unwrap(), body, token).await?;
         let result = deserialize_response::<R>(resp.body())?;
         Ok(result)
     }
@@ -90,11 +91,39 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
                              //T: Send + DeserializeOwned,
     {
         let client = HttpC::new(None)?;
+
         let resp = client
             .video_post(build_url.parse().unwrap(), body, access_token)
             .await?;
-        let result = deserialize_response::<R>(resp.body())?;
-        Ok(result)
+            let result = deserialize_response::<R>(resp.body())?;
+            Ok(result)
+    }
+    pub async fn request_empty_body<R>(
+        build_url: String,
+        body: Value,
+        access_token: String,
+    ) -> Result<String, ClientErr>
+    where
+        Self: Sized,
+        R: DeserializeOwned, // response Type
+                             //T: Send + DeserializeOwned,
+    {
+        let client = HttpC::new(None)?;
+
+        let resp = client
+            .video_post(build_url.parse().unwrap(), body, access_token)
+            .await?;
+        if resp.body().is_empty() {
+            let custom_resp = "status : ".to_owned() + &resp.status().to_string();
+            Ok(custom_resp)
+        }else {
+            // we are only expecting to use this for empty body request
+            Err(ClientErr::LinkedinError(format!(
+                "Unexpected request.  expecting an empty request body but found : {:?}",
+                resp.body()
+            )))
+        }
+
     }
 
     #[cfg(any(feature = "reqwest_async"))]
@@ -111,11 +140,10 @@ impl<HttpC: HttpClient> GenericClientConnection<HttpC> {
     {
         let client = HttpC::new(None)?;
         let resp = client
-            .file_upload(build_url.parse().unwrap(), body, token, &upload_type)
+            .file_upload(build_url.parse().unwrap(), body, token, upload_type)
             .await;
         if resp.is_ok() {
-            println!("print from side: {}", resp.unwrap().status());
-            let result = "201".to_string();
+            let result = resp.unwrap().headers().get("etag").unwrap().to_str().unwrap().to_string();
             Ok(result)
         } else {
             Err(ClientErr::LinkedinError(format!(
