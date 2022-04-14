@@ -1,10 +1,10 @@
 use crate::http_clinent::client::HttpConnection;
 use crate::http_clinent::errors::ClientErr;
 use crate::share::file_utils::FileChunking;
-use crate::video::utils::{InitVideoParams, InitVideoResponse, UploadingVideos, VideoUploadStatus};
+use crate::video::utils::{InitVideoResponse, UploadInstructions, VideoUploadStatus};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-
+use std::io::prelude::*;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct VideoApi {
     base_url: String,
@@ -27,7 +27,7 @@ impl VideoApi {
     ) -> Result<InitVideoResponse, ClientErr> {
         let person_id = "urn:li:person:".to_owned() + &self.person_id.clone();
 
-         let url = self.base_url.to_owned()+"action=initializeUpload";
+        let url = self.base_url.to_owned() + "action=initializeUpload";
         let resp = HttpConnection::video_post::<InitVideoResponse>(
             url.to_string(),
             serde_json::to_value(&init_params).unwrap(),
@@ -68,8 +68,8 @@ impl VideoApi {
     }
 
     pub async fn upload_status(self, video_id: String) -> Result<VideoUploadStatus, ClientErr> {
-        let base_url   = self.base_url.replace("?","/");
-        let url =  base_url+&video_id;
+        let base_url = self.base_url.replace("?", "/");
+        let url = base_url + &video_id;
         let token = self.access_token.clone();
         let resp = HttpConnection::get::<VideoUploadStatus>(url, "".to_string(), token).await?;
         Ok(resp)
@@ -77,150 +77,137 @@ impl VideoApi {
 
     pub async fn video_upload_handeler(
         &self,
-        file_list: UploadingVideos,
-        init_params: InitVideoParams,
+        video: File,
+        video_caption: Option<File>,
+        video_thumbnail: Option<File>,
+        purpose: String,
     ) -> Result<VideoUploadStatus, ClientErr> {
         let token = self.clone().access_token.clone();
         let url = self.clone().base_url.clone();
+
         let mut etag_list: Vec<String> = Vec::new();
         let single_upload_size = 4194303; // 4 biytes
 
-        if file_list.main_video.is_none() {
-            //dont run the rest of the code
-            Err(ClientErr::LinkedinError(format!(
-                "Error in the passed the params. The video file is required, Try uploading again "
-            )))
+        let video_file = video.try_clone().unwrap_or(video);
+        let file_size = video_file.metadata().unwrap().len();
+
+        let video_thumb_nail = if video_thumbnail.is_some() {
+            true
         } else {
-            let video_file = file_list.main_video.unwrap().try_clone().unwrap();
-            let file_size = video_file.metadata().unwrap().len();
+            false
+        };
 
-            //it seems like linked allows max of 4mb of upload so it is greater than that then chunk it
-            let video_params = init_params.clone();
+        let _video_caption = if video_caption.is_some() { true } else { false };
 
-            if file_size < single_upload_size {
-                let resp = self.clone().init_video_upload(video_params.clone()).await; // send init request
+        let video_init_params = InitVideoParams {
+            initializeUploadRequest: InitializeUploadRequest {
+                owner: self.person_id.clone(),
+                purpose,
+                fileSizeBytes: file_size,
+                uploadCaptions: _video_caption,
+                uploadThumbnail: video_thumb_nail,
+            },
+        };
 
-                if resp.is_ok() {
+        //it seems like linked allows max of 4mb of upload so it is greater than that then chunk it
 
-                    let video_init_resp = resp.as_ref().unwrap().clone();
-                    let buffer_file = FileChunking::new(video_file).extract_to_end();
-                    //this is for single upload  so the upload uploading should be array of length 1
-                    let upload_url = &video_init_resp.value.uploadInstructions[0]
-                        .uploadUrl
-                        .clone();
-                    let video_resp = self
-                        .clone()
-                        .upload_media(upload_url.to_string(), buffer_file)
-                        .await;
+        //Initialze request
+        let init_resp = self.clone().init_video_upload(video_init_params).await?; // send init request
 
-                    if video_resp.is_ok() {
-                        //get etag in the reponse header
-                        etag_list.push(video_resp.unwrap());
-                        // upload vido caption
-                        if !video_init_resp.value.captionsUploadUrl.is_empty()
-                            && file_list.video_caption.is_some()
-                        {
-                            let caption_file = file_list.video_caption.unwrap();
-                            let buffer_file = FileChunking::new(caption_file).extract_to_end();
-                            let capt_resp = self
-                                .clone()
-                                .upload_media(video_init_resp.value.captionsUploadUrl, buffer_file)
-                                .await?;
-                            etag_list.push(capt_resp)
-                        };
+        let uploading_list = init_resp.clone().value.uploadInstructions.clone();
+        let caption_url = init_resp.clone().value.captionsUploadUrl;
+        let thumbs_url = init_resp.clone().value.thumbnailUploadUrl;
+        let upload_token = init_resp.clone().value.uploadToken.clone();
+        let upload_video_id = init_resp.clone().value.video.clone();
 
-                        if !video_init_resp.value.thumbnailUploadUrl.is_empty()
-                            && file_list.video_thumbnail.is_some()
-                        {
-                            let thum_file = file_list.video_thumbnail.unwrap();
-                            let buffer_file = FileChunking::new(thum_file).extract_to_end();
-                            let thumb_resp = self
-                                .clone()
-                                .upload_media(video_init_resp.value.thumbnailUploadUrl, buffer_file)
-                                .await?;
-                            etag_list.push(thumb_resp)
-                        };
+        if file_size < single_upload_size {
+            //  if init_resp.is_ok() {
+            let buffer_file = FileChunking::new(video_file).extract_to_end();
+            //this is for single upload  so the upload uploading should be array of length 1
+            let upload_url = uploading_list[0].uploadUrl.clone();
+            //Upload video
+            let video_resp = self
+                .clone()
+                .upload_media(upload_url.to_string(), buffer_file)
+                .await?;
 
-                        //confirm and finalize upload
-                        let confrim_data = UploadConfrimationRequest::new(
-                            video_init_resp.value.video.clone(),
-                            video_init_resp.value.uploadToken.clone(),
-                            etag_list,
-                        );
+            //get etag in the reponse header
+            etag_list.push(video_resp);
+        } else {
+            let video_init_resp = init_resp;
 
-                        let data = FinalUploadData::new(confrim_data);
-                        let final_resp = self.clone().confirm_final_upload(data).await?;
-                        let status_resp  = self
-                            .clone()
-                            .upload_status(video_init_resp.value.video)
-                            .await?;
-                        println!("status_resp {:?}" ,status_resp);
+            let file_chunk = FileChunking::new(video_file.try_clone().unwrap());
 
-                        Ok(status_resp)
-                    } else {
-                        Err(ClientErr::LinkedinError(format!(
-                            "Error in initalizing  vidoe upload, try again.  Err message: {:?}",
-                            resp.err()
-                        )))
-                    }
-                } else {
-                    Err(ClientErr::HttpClient(format!(
-                        "Error in initalizing  vidoe upload, try again.  Err message: {:?}",
-                        resp.err()
-                    )))
-                }
-            } else {
-                let video_init_resp = self.clone().init_video_upload(init_params).await?; // send init request
+            for upload_data in uploading_list.iter() {
+                let upload_url = upload_data.uploadUrl.clone();
+                let upload_size = upload_data.lastByte.clone();
+                let previous_position = upload_data.firstByte.clone();
 
-                let file_chunk = FileChunking::new(video_file.try_clone().unwrap());
+                let chunk_data = FileChunking::new(video_file.try_clone().unwrap())
+                    .extract_by_size_and_offset(upload_size, previous_position);
 
-                let uploading_list = video_init_resp.clone().value.uploadInstructions.clone();
-                let caption_url = video_init_resp.clone().value.captionsUploadUrl;
-                let thumbs_url = video_init_resp.clone().value.thumbnailUploadUrl;
-                let upload_token = video_init_resp.clone().value.uploadToken.clone();
-                let upload_video_id = video_init_resp.clone().value.video.clone();
-
-                for upload_data in uploading_list.iter() {
-                    let upload_url = upload_data.uploadUrl.clone();
-                    let upload_size = upload_data.lastByte.clone();
-                    let previous_position = upload_data.firstByte.clone();
-
-                    let chunk_data = FileChunking::new(video_file.try_clone().unwrap())
-                        .extract_by_size_and_offset(upload_size , previous_position);
-
-                    let etag_resp = self.clone().upload_media(upload_url, chunk_data).await?;
-                    etag_list.push(etag_resp);
-                }
-
-                if !caption_url.is_empty() && file_list.video_caption.is_some() {
-                    let caption_file = file_list.video_caption.unwrap();
-                    let buffer_file = FileChunking::new(caption_file).extract_to_end();
-                    let capt_resp = self.clone().upload_media(caption_url, buffer_file).await?;
-                    etag_list.push(capt_resp)
-                }
-
-                if !thumbs_url.is_empty() && file_list.video_thumbnail.is_some() {
-                    let thum_file = file_list.video_thumbnail.unwrap();
-                    let buffer_file = FileChunking::new(thum_file).extract_to_end();
-                    let thumb_resp = self.clone().upload_media(thumbs_url, buffer_file).await?;
-                    etag_list.push(thumb_resp);
-                }
-                //confirm and finalize upload
-                let confrim_data = UploadConfrimationRequest::new(
-                    upload_video_id.clone(),
-                    upload_token,
-                    etag_list.clone(),
-                );
-                println!("etag lsis {:?}",etag_list.len() );
-
-                let data = FinalUploadData::new(confrim_data);
-                let final_resp = self.clone().confirm_final_upload(data).await?;
-                  println!("confirmation {}",final_resp );
-                let status_resp = self.clone().upload_status(upload_video_id.clone()).await?;
-                println!("staus{:?}",status_resp );
-                Ok(status_resp)
+                let etag_resp = self.clone().upload_media(upload_url, chunk_data).await?;
+                etag_list.push(etag_resp);
             }
+
+            let completed_etags = self
+                .clone()
+                .upload_by_chunk(video_init_resp.clone(), video_file.try_clone().unwrap())
+                .await?;
+            etag_list = completed_etags;
         }
+
+        if video_thumbnail.is_some() {
+            let buffer_file = FileChunking::new(video_thumbnail.unwrap()).extract_to_end();
+            let thumb_resp = self.clone().upload_media(thumbs_url, buffer_file).await?;
+            etag_list.push(thumb_resp)
+        }
+
+        if video_caption.is_some() {
+            let buffer_file = FileChunking::new(video_caption.unwrap()).extract_to_end();
+            let capt_resp = self.clone().upload_media(caption_url, buffer_file).await?;
+            etag_list.push(capt_resp)
+        }
+
+        //confirm and finalize upload
+        let confrim_data =
+            UploadConfrimationRequest::new(upload_video_id.clone(), upload_token, etag_list);
+
+        let data = FinalUploadData::new(confrim_data);
+        let final_resp = self.clone().confirm_final_upload(data).await?;
+
+        let status_resp = self.clone().upload_status(upload_video_id).await?;
+        println!("status_resp {:?}", status_resp);
+
+        Ok(status_resp)
+    }
+
+    async fn upload_by_chunk(
+        &self,
+        uploading_data: InitVideoResponse,
+        video: File,
+    ) -> Result<Vec<String>, ClientErr> {
+        let mut etag_list: Vec<String> = Vec::new();
+        let uploading_data_list = uploading_data.value.uploadInstructions;
+        let mut count = 0;
+
+        for upload_data in uploading_data_list.iter() {
+            let upload_url = upload_data.uploadUrl.clone();
+            let upload_size = upload_data.lastByte.clone();
+            let previous_position = upload_data.firstByte.clone();
+
+            println!("size {}  previous: {:?} ", upload_size, previous_position);
+            let chunk_data = FileChunking::new(video.try_clone().unwrap())
+                .extract_by_size_and_offset(upload_size, previous_position);
+            let file_name = format!("/home/azibodusio/Downloads/Deer_{}.mp4", count);
+            let mut f = File::create(file_name).unwrap();
+            f.write_all(&chunk_data).unwrap();
+            let etag_resp = self.clone().upload_media(upload_url, chunk_data).await?;
+            etag_list.push(etag_resp);
+            count += 1;
+            // println!("count list {} etag: {:?} ", count, etag_list)
+        }
+        Ok(etag_list)
     }
 }
 
@@ -261,4 +248,18 @@ impl UploadConfrimationRequest {
     pub fn set_uploadedPartIds(&mut self, uploadedPartIds: Vec<String>) {
         self.uploadedPartIds = uploadedPartIds;
     }
+}
+
+#[derive(Serialize)]
+pub struct InitializeUploadRequest {
+    owner: String,
+    purpose: String,
+    fileSizeBytes: u64,
+    uploadCaptions: bool,
+    uploadThumbnail: bool,
+}
+
+#[derive(Serialize)]
+pub struct InitVideoParams {
+    initializeUploadRequest: InitializeUploadRequest,
 }

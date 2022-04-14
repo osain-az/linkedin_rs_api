@@ -109,7 +109,7 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
            log!(config);
            model.redirect_url = RedirectURL::new(config)
                .add_response_type("code")
-               .add_scope(&["r_liteprofile".to_string(),"r_emailaddress".to_string(),"w_member_social".to_string()]).add_full_url();
+               .add_scope(&["r_liteprofile".to_string(),"r_emailaddress".to_string(),"w_member_social".to_string(), "w_organization_social".to_string(), "rw_ads".to_string()]).add_full_url();
            log!(model.redirect_url.full_url);
        }
         Msg::ConfigFetched(fetch_error) => error!("Config fetch failed! Be sure to have config.json at the root of your project with client_id and redirect_uri", fetch_error),
